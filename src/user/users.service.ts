@@ -9,6 +9,7 @@ import { User } from '@prisma/client';
 import { PasswordService } from 'src/common/services/password.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
@@ -35,6 +36,10 @@ export class UsersService {
 
   async findByEmail(email: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
+    return user;
+  }
+  async findById(id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
     return user;
   }
 
@@ -81,5 +86,37 @@ export class UsersService {
         name: createUserDto.name,
       },
     });
+  }
+
+  async update(updateUserDto: UpdateUserDto, id: string) {
+    const user = await this.findById(id);
+
+    if (updateUserDto.email) {
+      const emailExist = await this.findByEmail(updateUserDto.email);
+      if (emailExist) {
+        throw new ConflictException('user with this email already exists');
+      }
+    }
+
+    if (!user) {
+      throw new NotFoundException(`User with the id ${id} does not exist`);
+    }
+
+    const updateData: Partial<UpdateUserDto> = { ...updateUserDto };
+    if (updateUserDto.password) {
+      updateData.password = await this.passwordService.hashPassword(
+        updateUserDto.password,
+      );
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id },
+      data: updateData,
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password, ...updatedUserWithoutPassword } = updatedUser;
+
+    return updatedUserWithoutPassword;
   }
 }
