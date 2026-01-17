@@ -5,6 +5,7 @@
 ## What We're Building
 
 A complete registration endpoint that:
+
 1. Validates user input (email, password)
 2. Checks if user already exists
 3. Hashes the password
@@ -18,7 +19,13 @@ A complete registration endpoint that:
 Create `src/users/dto/create-user.dto.ts`:
 
 ```typescript
-import { IsEmail, IsNotEmpty, MinLength, IsOptional, IsString } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  MinLength,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class CreateUserDto {
   @IsEmail({}, { message: 'Please provide a valid email address' })
@@ -78,6 +85,7 @@ name?: string;
 - `?` in TypeScript = optional property
 
 **Why DTOs?**
+
 - **Validation**: Automatic validation before reaching controller
 - **Type Safety**: TypeScript knows the shape of data
 - **Documentation**: Clear what the endpoint expects
@@ -88,31 +96,43 @@ name?: string;
 Update `src/users/users.service.ts`:
 
 ```typescript
-import { Injectable, ConflictException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { User } from './entities/user.entity';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
+import { PrismaService } from 'prisma/prisma.service';
+import { User } from '@prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
 import { PasswordService } from '../common/services/password.service';
 
 @Injectable()
 export class UsersService {
   constructor(
-    @InjectRepository(User)
-    private userRepository: Repository<User>,
+    private prisma: PrismaService,
     private passwordService: PasswordService, // Inject PasswordService
   ) {}
 
   async findAll(): Promise<User[]> {
-    return this.userRepository.find();
+    return this.prisma.user.findMany();
   }
 
   async findOne(id: string): Promise<User> {
-    return this.userRepository.findOne({ where: { id } });
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    return user;
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { email } });
+    return this.prisma.user.findUnique({
+      where: { email },
+    });
   }
 
   async create(createUserDto: CreateUserDto): Promise<Omit<User, 'password'>> {
@@ -127,16 +147,15 @@ export class UsersService {
       createUserDto.password,
     );
 
-    // Create user entity
-    const user = this.userRepository.create({
-      email: createUserDto.email,
-      password: hashedPassword, // Store hashed password, not plaintext!
-      name: createUserDto.name,
-      isActive: true,
+    // Create user in database
+    const savedUser = await this.prisma.user.create({
+      data: {
+        email: createUserDto.email,
+        password: hashedPassword, // Store hashed password, not plaintext!
+        name: createUserDto.name,
+        isActive: true,
+      },
     });
-
-    // Save to database
-    const savedUser = await this.userRepository.save(user);
 
     // Return user without password (security!)
     const { password, ...userWithoutPassword } = savedUser;
@@ -157,6 +176,7 @@ if (existingUser) {
 ```
 
 **Why check?**
+
 - Email should be unique
 - Prevents duplicate accounts
 - `ConflictException` = HTTP 409 status code
@@ -171,28 +191,22 @@ const hashedPassword = await this.passwordService.hashPassword(
 
 **Important**: Hash BEFORE saving to database!
 
-#### Create Entity
+#### Create User in Database
 
 ```typescript
-const user = this.userRepository.create({
-  email: createUserDto.email,
-  password: hashedPassword, // ✅ Hashed, not plaintext!
-  name: createUserDto.name,
-  isActive: true,
+const savedUser = await this.prisma.user.create({
+  data: {
+    email: createUserDto.email,
+    password: hashedPassword, // ✅ Hashed, not plaintext!
+    name: createUserDto.name,
+    isActive: true,
+  },
 });
 ```
 
-- `create()` = creates entity instance (doesn't save yet)
+- `create()` = creates and saves user in one operation
 - Sets `isActive: true` by default
-
-#### Save to Database
-
-```typescript
-const savedUser = await this.userRepository.save(user);
-```
-
-- Actually saves to database
-- Returns saved entity with generated ID
+- Returns saved user with generated ID
 
 #### Return Without Password
 
@@ -202,14 +216,17 @@ return userWithoutPassword;
 ```
 
 **Why remove password?**
+
 - **Security**: Never send password hash in response
 - Even hashed passwords shouldn't be exposed
 - Uses destructuring to exclude password
 
 **TypeScript trick**:
+
 ```typescript
-Omit<User, 'password'>
+Omit<User, 'password'>;
 ```
+
 - Return type excludes `password` field
 - Type-safe way to remove sensitive data
 
@@ -219,15 +236,14 @@ Update `src/users/users.module.ts`:
 
 ```typescript
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { User } from './entities/user.entity';
+import { PrismaModule } from 'prisma/prisma.module';
 import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
 import { CommonModule } from '../common/common.module'; // Add this
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User]),
+    PrismaModule, // Provides PrismaService
     CommonModule, // Add this - provides PasswordService
   ],
   controllers: [UsersController],
@@ -238,6 +254,7 @@ export class UsersModule {}
 ```
 
 **Why import CommonModule?**
+
 - `UsersService` needs `PasswordService`
 - `CommonModule` exports `PasswordService`
 - Import makes it available for injection
@@ -315,7 +332,7 @@ import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
+
   // Enable validation globally
   app.useGlobalPipes(
     new ValidationPipe({
@@ -324,7 +341,7 @@ async function bootstrap() {
       transform: true, // Automatically transform payloads to DTO instances
     }),
   );
-  
+
   await app.listen(3000);
 }
 bootstrap();
@@ -337,12 +354,13 @@ bootstrap();
 - **transform: true**: Converts plain objects to DTO instances
 
 **Example**:
+
 ```json
 // Request
 {
   "email": "test@example.com",
   "password": "password123",
-  "hackerField": "malicious"  // ← Removed by whitelist
+  "hackerField": "malicious" // ← Removed by whitelist
 }
 ```
 
@@ -361,6 +379,7 @@ curl -X POST http://localhost:3000/users \
 ```
 
 **Expected response** (201 Created):
+
 ```json
 {
   "id": "uuid-here",
@@ -386,6 +405,7 @@ curl -X POST http://localhost:3000/users \
 ```
 
 **Expected response** (400 Bad Request):
+
 ```json
 {
   "statusCode": 400,
@@ -406,6 +426,7 @@ curl -X POST http://localhost:3000/users \
 ```
 
 **Expected response** (400 Bad Request):
+
 ```json
 {
   "statusCode": 400,
@@ -427,6 +448,7 @@ curl -X POST http://localhost:3000/users \
 ```
 
 **Expected response** (409 Conflict):
+
 ```json
 {
   "statusCode": 409,
@@ -450,6 +472,7 @@ SELECT email, password FROM users;
 ```
 
 **Expected**:
+
 ```
 email              | password
 -------------------+----------------------------------------------------------

@@ -5,6 +5,7 @@
 ## What We're Building
 
 A complete login endpoint that:
+
 1. Validates user input (email, password)
 2. Finds user by email
 3. Verifies password using bcrypt
@@ -31,6 +32,7 @@ export class LoginUserDto {
 ```
 
 **Why separate DTO from CreateUserDto?**
+
 - **Different validation**: Login doesn't need name, doesn't need min length
 - **Clear intent**: Login vs Registration are different operations
 - **Flexibility**: Can change login requirements without affecting registration
@@ -40,10 +42,13 @@ export class LoginUserDto {
 Update `src/users/users.service.ts`:
 
 ```typescript
-import { Injectable, ConflictException, UnauthorizedException, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { User } from './entities/user.entity';
+import {
+  Injectable,
+  UnauthorizedException,
+  NotFoundException,
+} from '@nestjs/common';
+import { PrismaService } from 'prisma/prisma.service';
+import { User } from '@prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 import { PasswordService } from '../common/services/password.service';
@@ -51,17 +56,22 @@ import { PasswordService } from '../common/services/password.service';
 @Injectable()
 export class UsersService {
   constructor(
-    @InjectRepository(User)
-    private userRepository: Repository<User>,
+    private prisma: PrismaService,
     private passwordService: PasswordService,
   ) {}
 
   // ... existing methods ...
 
+  async findByEmail(email: string): Promise<User | null> {
+    return this.prisma.user.findUnique({
+      where: { email },
+    });
+  }
+
   async login(loginUserDto: LoginUserDto): Promise<Omit<User, 'password'>> {
     // Find user by email
     const user = await this.findByEmail(loginUserDto.email);
-    
+
     if (!user) {
       throw new NotFoundException('Invalid email or password');
     }
@@ -101,6 +111,7 @@ if (!user) {
 ```
 
 **Why generic error message?**
+
 - **Security**: Don't reveal if email exists
 - Attacker can't enumerate valid emails
 - Same message for wrong email or wrong password
@@ -114,6 +125,7 @@ if (!user.isActive) {
 ```
 
 **Why check?**
+
 - Prevents login for deactivated accounts
 - Security feature (can disable accounts)
 - Clear error message for legitimate users
@@ -122,8 +134,8 @@ if (!user.isActive) {
 
 ```typescript
 const isPasswordValid = await this.passwordService.comparePassword(
-  loginUserDto.password,  // Plaintext from user
-  user.password,          // Hashed from database
+  loginUserDto.password, // Plaintext from user
+  user.password, // Hashed from database
 );
 
 if (!isPasswordValid) {
@@ -132,12 +144,14 @@ if (!isPasswordValid) {
 ```
 
 **How it works**:
+
 1. `comparePassword()` extracts salt from stored hash
 2. Hashes entered password with extracted salt
 3. Compares the two hashes
 4. Returns `true` if match, `false` otherwise
 
 **Why async?**
+
 - bcrypt comparison is CPU-intensive
 - Async prevents blocking event loop
 
@@ -247,6 +261,7 @@ curl -X POST http://localhost:3000/users/login \
 ```
 
 **Expected response** (200 OK):
+
 ```json
 {
   "id": "uuid-here",
@@ -270,6 +285,7 @@ curl -X POST http://localhost:3000/users/login \
 ```
 
 **Expected response** (401 Unauthorized):
+
 ```json
 {
   "statusCode": 401,
@@ -290,6 +306,7 @@ curl -X POST http://localhost:3000/users/login \
 ```
 
 **Expected response** (404 Not Found):
+
 ```json
 {
   "statusCode": 404,
@@ -312,6 +329,7 @@ curl -X POST http://localhost:3000/users/login \
 ```
 
 **Expected response** (400 Bad Request):
+
 ```json
 {
   "statusCode": 400,
@@ -340,6 +358,7 @@ curl -X POST http://localhost:3000/users/login \
 ```
 
 **Expected response** (401 Unauthorized):
+
 ```json
 {
   "statusCode": 401,
@@ -353,6 +372,7 @@ curl -X POST http://localhost:3000/users/login \
 ### 1. Generic Error Messages
 
 **Why "Invalid email or password" for both?**
+
 - Prevents email enumeration
 - Attacker can't tell if email exists
 - Slows down brute force attacks
@@ -360,6 +380,7 @@ curl -X POST http://localhost:3000/users/login \
 ### 2. Rate Limiting (Future)
 
 **What we'll add later**:
+
 - Limit login attempts per IP
 - Prevent brute force attacks
 - Temporary account lockout
@@ -367,6 +388,7 @@ curl -X POST http://localhost:3000/users/login \
 ### 3. Password Timing
 
 **bcrypt is slow by design**:
+
 - Takes ~100ms to verify password
 - Slows down brute force attacks
 - Acceptable delay for legitimate users
@@ -374,11 +396,13 @@ curl -X POST http://localhost:3000/users/login \
 ### 4. Never Log Passwords
 
 **✅ DO**:
+
 ```typescript
 console.log('Login attempt for:', email);
 ```
 
 **❌ DON'T**:
+
 ```typescript
 console.log('Password:', password); // ❌ Never!
 ```
@@ -470,6 +494,7 @@ return userWithoutPassword; // ✅ No password!
 ## Lesson 02 Summary
 
 You've learned:
+
 - ✅ Why we hash passwords (security)
 - ✅ How bcrypt works (salting, hashing, rounds)
 - ✅ How to hash passwords (PasswordService)

@@ -1,0 +1,85 @@
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { PrismaService } from 'prisma/prisma.service';
+import { User } from '@prisma/client';
+import { PasswordService } from 'src/common/services/password.service';
+import { CreateUserDto } from './dto/create-user.dto';
+import { LoginUserDto } from './dto/login-user.dto';
+
+@Injectable()
+export class UsersService {
+  constructor(
+    private prisma: PrismaService,
+    private passwordService: PasswordService,
+  ) {}
+
+  async findAll() {
+    return this.prisma.user.findMany();
+  }
+
+  async findOne(id: string): Promise<User> {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    return user;
+  }
+
+  async findByEmail(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    return user;
+  }
+
+  async login(loginUserDto: LoginUserDto) {
+    const { email } = loginUserDto;
+    const user = await this.findByEmail(email);
+
+    if (!user) {
+      throw new NotFoundException('Invalid Email or Password');
+    }
+
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is Inactive');
+    }
+
+    //up next is to verify the hashed password with the one that was passed in the dto
+
+    const isVerified = await this.passwordService.comparePassword(
+      loginUserDto.password,
+      user.password,
+    );
+
+    if (!isVerified) {
+      throw new UnauthorizedException('Invalid Email or Passowrd');
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password, ...userWithoutPassword } = user;
+    return userWithoutPassword;
+  }
+
+  async create(createUserDto: CreateUserDto) {
+    const existingUser = await this.findByEmail(createUserDto.email);
+    if (existingUser) {
+      throw new ConflictException('User with this email already exists');
+    }
+    const hashedPassword = await this.passwordService.hashPassword(
+      createUserDto.password,
+    );
+    return this.prisma.user.create({
+      data: {
+        email: createUserDto.email,
+        password: hashedPassword,
+        name: createUserDto.name,
+      },
+    });
+  }
+}

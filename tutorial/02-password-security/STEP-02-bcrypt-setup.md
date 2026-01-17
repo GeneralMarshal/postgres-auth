@@ -14,6 +14,7 @@ npm install --save-dev @types/bcryptjs
 ```
 
 **Why `bcryptjs` instead of `bcrypt`?**
+
 - `bcryptjs`: Pure JavaScript (works everywhere)
 - `bcrypt`: Native bindings (faster but can have install issues)
 - For learning, `bcryptjs` is easier and works the same
@@ -40,6 +41,7 @@ Check `package.json`:
 **Question**: Why create a separate service for password hashing?
 
 **Answer**:
+
 - **Reusability**: Use in registration, password reset, change password
 - **Testability**: Easy to test password operations
 - **Single Responsibility**: One service, one job
@@ -104,6 +106,7 @@ private readonly saltRounds = 10;
 - `private` = only accessible within this class
 
 **Why 10?**
+
 - Less than 10: Too fast (weak security)
 - More than 12: Too slow (bad user experience)
 - 10: Industry standard (good balance)
@@ -117,6 +120,7 @@ async hashPassword(password: string): Promise<string> {
 ```
 
 **What it does**:
+
 1. Takes plaintext password
 2. Generates salt automatically
 3. Hashes password with salt (10 rounds)
@@ -136,6 +140,7 @@ async comparePassword(
 ```
 
 **What it does**:
+
 1. Takes plaintext password (from user input)
 2. Takes stored hash (from database)
 3. Extracts salt from stored hash
@@ -144,6 +149,7 @@ async comparePassword(
 6. Returns `true` if match, `false` otherwise
 
 **Why async?**
+
 - bcrypt operations are CPU-intensive
 - Async prevents blocking the event loop
 - Better performance
@@ -166,6 +172,7 @@ export class CommonModule {}
 ```
 
 **What this does**:
+
 - Makes `PasswordService` available
 - Exports it so other modules can use it
 
@@ -175,11 +182,11 @@ Update `src/app.module.ts`:
 
 ```typescript
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { UsersModule } from './users/users.module';
+import { PrismaModule } from 'prisma/prisma.module';
+import { UserModule } from './user/users.module';
 import { CommonModule } from './common/common.module'; // Add this
 
 @Module({
@@ -188,10 +195,8 @@ import { CommonModule } from './common/common.module'; // Add this
       isGlobal: true,
       envFilePath: '.env',
     }),
-    TypeOrmModule.forRootAsync({
-      // ... existing config
-    }),
-    UsersModule,
+    PrismaModule,
+    UserModule,
     CommonModule, // Add this
   ],
   controllers: [AppController],
@@ -211,25 +216,26 @@ import * as bcrypt from 'bcryptjs';
 
 async function testPassword() {
   const password = 'mypassword123';
-  
+
   // Hash password
   const hash = await bcrypt.hash(password, 10);
   console.log('Original password:', password);
   console.log('Hashed password:', hash);
-  
+
   // Compare passwords
   const isValid1 = await bcrypt.compare(password, hash);
   console.log('Correct password matches:', isValid1); // Should be true
-  
+
   const isValid2 = await bcrypt.compare('wrongpassword', hash);
   console.log('Wrong password matches:', isValid2); // Should be false
-  
+
   // Test that same password produces different hashes (due to salt)
   const hash2 = await bcrypt.hash(password, 10);
   console.log('Same password, different hash:', hash !== hash2); // Should be true
-  console.log('But both verify correctly:', 
-    (await bcrypt.compare(password, hash)) && 
-    (await bcrypt.compare(password, hash2))
+  console.log(
+    'But both verify correctly:',
+    (await bcrypt.compare(password, hash)) &&
+      (await bcrypt.compare(password, hash2)),
   ); // Should be true
 }
 
@@ -243,6 +249,7 @@ npx ts-node test-password.ts
 ```
 
 **Expected output**:
+
 ```
 Original password: mypassword123
 Hashed password: $2a$10$N9qo8uLOickgx2ZMRZoMye...
@@ -253,6 +260,7 @@ But both verify correctly: true
 ```
 
 **What this proves**:
+
 - ✅ Hashing works
 - ✅ Comparison works
 - ✅ Same password = different hashes (salting works!)
@@ -275,6 +283,7 @@ $2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy
 ```
 
 **Breaking it down**:
+
 - `$2a$` = bcrypt algorithm version
 - `10` = number of rounds
 - `N9qo8uLOickgx2ZMRZoMye` = salt (22 characters)
@@ -283,6 +292,7 @@ $2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy
 **Total**: 60 characters
 
 **Why this format?**
+
 - Salt is embedded in the hash
 - `bcrypt.compare()` extracts salt automatically
 - No need to store salt separately!
