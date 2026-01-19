@@ -5,6 +5,7 @@
 ## What We're Building
 
 Update the login endpoint to:
+
 1. Validate user credentials (already done)
 2. Generate JWT token
 3. Return token in response
@@ -105,6 +106,7 @@ export class UserModule {}
 ```
 
 **What changed**:
+
 - Added `AuthModule` to imports
 - Makes `AuthJwtService` available for injection
 
@@ -122,6 +124,7 @@ curl -X POST http://localhost:3000/users/login \
 ```
 
 **Expected response** (200 OK):
+
 ```json
 {
   "user": {
@@ -137,6 +140,7 @@ curl -X POST http://localhost:3000/users/login \
 ```
 
 **Notice**:
+
 - ✅ User data (without password)
 - ✅ Access token included
 - ✅ Token is a long string
@@ -153,6 +157,7 @@ curl -X POST http://localhost:3000/users/login \
 ```
 
 **Expected response** (401 Unauthorized):
+
 ```json
 {
   "statusCode": 401,
@@ -171,13 +176,14 @@ You can decode the token to see its contents (using [jwt.io](https://jwt.io) or 
 // Temporary test
 import { JwtService } from '@nestjs/jwt';
 
-const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...";
+const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...';
 const jwtService = new JwtService();
 const decoded = jwtService.decode(token);
 console.log(decoded);
 ```
 
 **Expected**:
+
 ```json
 {
   "sub": "user-uuid",
@@ -199,6 +205,7 @@ console.log(decoded);
 ```
 
 **Why this structure?**
+
 - **user**: User data for frontend (display name, email, etc.)
 - **accessToken**: Token for authenticated requests
 
@@ -215,8 +222,8 @@ localStorage.setItem('token', accessToken);
 // Use token in requests
 fetch('/api/users/profile', {
   headers: {
-    'Authorization': `Bearer ${accessToken}`
-  }
+    Authorization: `Bearer ${accessToken}`,
+  },
 });
 ```
 
@@ -225,7 +232,7 @@ fetch('/api/users/profile', {
 ### ✅ Good Practices
 
 1. **HTTPS only**: Always use HTTPS in production
-2. **Token storage**: 
+2. **Token storage**:
    - Memory (best for web apps)
    - HttpOnly cookie (more secure)
    - NOT localStorage (XSS risk)
@@ -260,9 +267,9 @@ Frontend should handle 401 responses:
 // Frontend code
 try {
   const response = await fetch('/api/users/profile', {
-    headers: { 'Authorization': `Bearer ${token}` }
+    headers: { Authorization: `Bearer ${token}` },
   });
-  
+
   if (response.status === 401) {
     // Token expired - redirect to login
     localStorage.removeItem('token');
@@ -301,7 +308,7 @@ return {
 ### 3. Module Imports
 
 ```typescript
-imports: [AuthModule]
+imports: [AuthModule];
 ```
 
 - Makes JWT service available
@@ -360,6 +367,7 @@ const token = await this.jwtService.generateToken(user.id, user.email);
 ## Lesson 03 Summary
 
 You've learned:
+
 - ✅ JWT structure (header.payload.signature)
 - ✅ Why we use JWT tokens (stateless auth)
 - ✅ How to create and sign tokens

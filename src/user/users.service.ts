@@ -10,12 +10,14 @@ import { PasswordService } from 'src/common/services/password.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { AuthJwtService } from 'src/auth/services/jwt/jwt.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     private prisma: PrismaService,
     private passwordService: PasswordService,
+    private jwtService: AuthJwtService,
   ) {}
 
   async findAll() {
@@ -66,9 +68,15 @@ export class UsersService {
       throw new UnauthorizedException('Invalid Email or Passowrd');
     }
 
+    //upnext generate the acces token using the AuthJwtService
+    const token = await this.jwtService.generateToken(user.id, user.email);
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, ...userWithoutPassword } = user;
-    return userWithoutPassword;
+    return {
+      user: userWithoutPassword,
+      accessToken: token,
+    };
   }
 
   async create(createUserDto: CreateUserDto) {

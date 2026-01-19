@@ -7,6 +7,7 @@
 **Question**: Why create a separate service for JWT operations?
 
 **Answer**:
+
 - **Reusability**: Use in login, refresh token, password reset
 - **Testability**: Easy to test token operations
 - **Single Responsibility**: One service, one job
@@ -89,6 +90,7 @@ async generateToken(userId: string, email: string): Promise<string> {
 ```
 
 **What it does**:
+
 1. Creates payload with user data
 2. Signs token with secret (from config)
 3. Returns token string
@@ -109,11 +111,13 @@ async verifyToken(token: string): Promise<JwtPayload | null> {
 ```
 
 **What it does**:
+
 1. Verifies token signature
 2. Checks expiration
 3. Returns payload if valid, null if invalid
 
 **Why try-catch?**
+
 - Invalid tokens throw errors
 - We return `null` instead of throwing
 - Easier error handling
@@ -148,6 +152,7 @@ export class AuthModule {}
 ```
 
 **What changed**:
+
 - Added `AuthJwtService` to `providers`
 - Added `AuthJwtService` to `exports` (so other modules can use it)
 
@@ -167,10 +172,7 @@ async function testJwt() {
   const jwtService = app.get(AuthJwtService);
 
   // Generate token
-  const token = await jwtService.generateToken(
-    'user-123',
-    'test@example.com',
-  );
+  const token = await jwtService.generateToken('user-123', 'test@example.com');
   console.log('Generated token:', token);
   console.log('Token length:', token.length);
 
@@ -196,6 +198,7 @@ npx ts-node test-jwt.ts
 ```
 
 **Expected output**:
+
 ```
 Generated token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 Token length: 150+
@@ -221,12 +224,13 @@ When you generate a token, it includes:
 {
   "sub": "user-123",
   "email": "test@example.com",
-  "iat": 1704067200,  // Issued at (auto-added)
-  "exp": 1704070800   // Expiration (auto-added)
+  "iat": 1704067200, // Issued at (auto-added)
+  "exp": 1704070800 // Expiration (auto-added)
 }
 ```
 
 **Auto-added claims**:
+
 - `iat`: Issued at timestamp (when token was created)
 - `exp`: Expiration timestamp (when token expires)
 

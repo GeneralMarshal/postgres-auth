@@ -32,7 +32,7 @@ export class AuthJwtService {
     try {
       const payload = await this.jwtService.verifyAsync<JwtPayload>(token);
       return payload;
-    } catch (error) {
+    } catch {
       return null;
     }
   }
