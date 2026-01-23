@@ -370,8 +370,8 @@ You've learned:
 
 - ✅ JWT structure (header.payload.signature)
 - ✅ Why we use JWT tokens (stateless auth)
-- ✅ How to create and sign tokens
-- ✅ How to verify tokens
+- ✅ How tokens
+- ✅ How to verify tokens to create and sign
 - ✅ JWT claims and expiration
 - ✅ Integration with login endpoint
 

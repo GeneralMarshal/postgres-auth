@@ -11,6 +11,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AuthJwtService } from 'src/auth/services/jwt/jwt.service';
+import { SessionService } from 'src/auth/services/session/session.service';
 
 @Injectable()
 export class UsersService {
@@ -18,6 +19,7 @@ export class UsersService {
     private prisma: PrismaService,
     private passwordService: PasswordService,
     private jwtService: AuthJwtService,
+    private sessionService: SessionService,
   ) {}
 
   async findAll() {
@@ -69,7 +71,17 @@ export class UsersService {
     }
 
     //upnext generate the acces token using the AuthJwtService
-    const token = await this.jwtService.generateToken(user.id, user.email);
+    const { token, tokenId } = await this.jwtService.generateToken(
+      user.id,
+      user.email,
+    );
+
+    // up next create session in redis using the tokenId
+    await this.sessionService.createSession(tokenId, {
+      userId: user.id,
+      email: user.email,
+      createdAt: new Date().toDateString(),
+    });
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, ...userWithoutPassword } = user;

@@ -3,9 +3,12 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { AuthJwtService } from './services/jwt/jwt.service';
+import { CommonModule } from 'src/common/common.module';
+import { SessionService } from './services/session/session.service';
 
 @Module({
   imports: [
+    CommonModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
@@ -24,7 +27,7 @@ import { AuthJwtService } from './services/jwt/jwt.service';
       inject: [ConfigService],
     }),
   ],
-  providers: [AuthJwtService],
-  exports: [JwtModule, AuthJwtService],
+  providers: [AuthJwtService, SessionService],
+  exports: [JwtModule, AuthJwtService, SessionService],
 })
 export class AuthModule {}
