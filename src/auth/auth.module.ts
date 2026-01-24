@@ -5,9 +5,12 @@ import * as jwt from 'jsonwebtoken';
 import { AuthJwtService } from './services/jwt/jwt.service';
 import { CommonModule } from 'src/common/common.module';
 import { SessionService } from './services/session/session.service';
-
+import { JwtStrategy } from './strategies/jwt.strategy';
+import { PassportModule } from '@nestjs/passport';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 @Module({
   imports: [
+    PassportModule,
     CommonModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -27,7 +30,13 @@ import { SessionService } from './services/session/session.service';
       inject: [ConfigService],
     }),
   ],
-  providers: [AuthJwtService, SessionService],
-  exports: [JwtModule, AuthJwtService, SessionService],
+  providers: [AuthJwtService, SessionService, JwtStrategy, JwtAuthGuard],
+  exports: [
+    JwtModule,
+    AuthJwtService,
+    SessionService,
+    PassportModule,
+    JwtAuthGuard,
+  ],
 })
 export class AuthModule {}
