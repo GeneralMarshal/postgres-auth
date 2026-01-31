@@ -8,6 +8,7 @@ import {
   Patch,
   UseGuards,
   Request,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -15,6 +16,7 @@ import { LoginUserDto } from './dto/login-user.dto';
 import { HttpStatus } from '@nestjs/common';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { User } from 'src/common/decorators/user.decorator';
 
 interface AuthenticatedUser {
   userId: string;
@@ -24,28 +26,40 @@ interface AuthenticatedUser {
   tokenId?: string;
 }
 
-interface AuthenticatedRequest extends Request {
-  user: AuthenticatedUser;
-}
+// interface AuthenticatedRequest extends Request {
+//   user: AuthenticatedUser;
+// }
 @Controller('users')
 export class UserController {
   constructor(private usersService: UsersService) {}
 
   @UseGuards(JwtAuthGuard)
   @Get('profile')
-  getProfile(@Request() req: AuthenticatedRequest) {
-    const user = req.user; // ← User from strategy validate()
+  getProfile(@User() user: AuthenticatedUser) {
     return {
       userId: user.userId,
       email: user.email,
       name: user.name,
+      role: user.role,
     };
   }
 
   @UseGuards(JwtAuthGuard)
   @Get()
-  findAll() {
+  findAll(@User() user) {
+    console.log('Authenticated user: ', user);
     return this.usersService.findAll();
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  getMe(@User() user: AuthenticatedUser) {
+    return {
+      userId: user.userId,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+    };
   }
 
   @UseGuards(JwtAuthGuard)
@@ -69,7 +83,15 @@ export class UserController {
   @UseGuards(JwtAuthGuard)
   @Patch(':id')
   @HttpCode(HttpStatus.OK)
-  update(@Body() updateUserDto: UpdateUserDto, @Param('id') id: string) {
-    return this.usersService.update(updateUserDto, id);
+  update(
+    @Body() updateUserDto: UpdateUserDto,
+    @Param('id') id: string,
+    @User() user: AuthenticatedUser,
+  ) {
+    if (user.userId === id) {
+      return this.usersService.update(updateUserDto, id);
+    } else {
+      throw new UnauthorizedException('You can only update your own profile');
+    }
   }
 }
