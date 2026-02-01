@@ -17,6 +17,10 @@ import { HttpStatus } from '@nestjs/common';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { User } from 'src/common/decorators/user.decorator';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { Roles } from 'src/common/decorators/role.decorator';
+import { UserRole } from '@prisma/client';
+
 
 interface AuthenticatedUser {
   userId: string;
@@ -30,6 +34,7 @@ interface AuthenticatedUser {
 //   user: AuthenticatedUser;
 // }
 @Controller('users')
+@UseGuards(JwtAuthGuard)
 export class UserController {
   constructor(private usersService: UsersService) {}
 
@@ -44,8 +49,9 @@ export class UserController {
     };
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
   findAll(@User() user) {
     console.log('Authenticated user: ', user);
     return this.usersService.findAll();

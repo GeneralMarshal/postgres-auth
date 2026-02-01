@@ -1,9 +1,11 @@
+import { UserRole } from '@prisma/client';
 import {
   IsEmail,
   MinLength,
   IsOptional,
   IsString,
   IsBoolean,
+  IsEnum,
 } from 'class-validator';
 
 export class UpdateUserDto {
@@ -23,4 +25,10 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsEnum(UserRole as object, {
+    message: 'Role must be one of: USER, ADMIN, MODERATOR, MANAGER',
+  })
+  role?: UserRole;
 }

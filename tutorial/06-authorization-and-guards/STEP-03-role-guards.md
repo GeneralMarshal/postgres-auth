@@ -29,23 +29,26 @@ First, create a decorator to mark routes with required roles. Create `src/common
 
 ```typescript
 import { SetMetadata } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 
 export const ROLES_KEY = 'roles';
-export const Roles = (...roles: string[]) => SetMetadata(ROLES_KEY, roles);
+export const Roles = (...roles: UserRole[]) => SetMetadata(ROLES_KEY, roles);
 ```
 
 **Breaking it down:**
 
 - `SetMetadata` - Stores metadata on route handlers
 - `ROLES_KEY` - Key to store roles metadata
-- `Roles(...roles)` - Decorator that accepts multiple roles
+- `Roles(...roles)` - Decorator that accepts one or more `UserRole` enum values
 - Returns a decorator function
 
 **Usage:**
 
 ```typescript
-@Roles('admin')              // Single role
-@Roles('admin', 'moderator') // Multiple roles (OR logic)
+import { UserRole } from '@prisma/client';
+
+@Roles(UserRole.ADMIN)                        // Single role
+@Roles(UserRole.ADMIN, UserRole.MODERATOR)    // Multiple roles (OR logic)
 ```
 
 ## Step 2: Create Roles Guard
@@ -55,6 +58,7 @@ Create `src/auth/guards/roles.guard.ts`:
 ```typescript
 import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { UserRole } from '@prisma/client';
 import { ROLES_KEY } from 'src/common/decorators/roles.decorator';
 
 @Injectable()
@@ -62,7 +66,7 @@ export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const requiredRoles = this.reflector.getAllAndOverride<string[]>(
+    const requiredRoles = this.reflector.getAllAndOverride<UserRole[]>(
       ROLES_KEY,
       [context.getHandler(), context.getClass()],
     );
@@ -81,7 +85,7 @@ export class RolesGuard implements CanActivate {
       return false;
     }
 
-    // Check if user's role matches any required role
+    // Check if user's role matches any required role (enum comparison)
     return requiredRoles.some((role) => user.role === role);
   }
 }
@@ -112,6 +116,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
+import { UserRole } from '@prisma/client';
 import { JwtPayload } from '../services/jwt/jwt.service';
 import { SessionValidatorService } from '../services/session/session-validator.service';
 
@@ -148,7 +153,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return {
       userId: payload.sub,
       email: payload.email,
-      role: payload.role || 'user', // ← Include role, default to 'user'
+      role: payload.role ?? UserRole.USER, // ← Include role, default to USER (enum)
       tokenId: payload.jti,
     };
   }
@@ -193,16 +198,17 @@ async validate(payload: JwtPayload) {
 
 ## Step 4: Update AuthenticatedUser Interface
 
-Update `src/common/decorators/user.decorator.ts` to include role:
+Update `src/common/decorators/user.decorator.ts` to include role (use Prisma enum):
 
 ```typescript
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 
 export interface AuthenticatedUser {
   userId: string;
   email: string;
   name?: string;
-  role?: string; // ← Add role
+  role?: UserRole; // ← Add role (enum)
   tokenId?: string;
 }
 
@@ -274,6 +280,7 @@ export class AuthModule {}
 
 ```typescript
 import { Controller, Get, UseGuards } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
@@ -282,7 +289,7 @@ import { Roles } from 'src/common/decorators/roles.decorator';
 @UseGuards(JwtAuthGuard, RolesGuard) // ← Apply both guards
 export class AdminController {
   @Get('dashboard')
-  @Roles('admin') // ← Only admins can access
+  @Roles(UserRole.ADMIN) // ← Only admins can access
   getDashboard() {
     return { message: 'Admin dashboard' };
   }
@@ -292,8 +299,10 @@ export class AdminController {
 **Multiple roles (OR logic):**
 
 ```typescript
+import { UserRole } from '@prisma/client';
+
 @Get('moderate')
-@Roles('admin', 'moderator')  // ← Admin OR moderator
+@Roles(UserRole.ADMIN, UserRole.MODERATOR)  // ← Admin OR moderator
 moderateContent() {
   return { message: 'Moderation panel' };
 }
@@ -317,12 +326,15 @@ import {
   Patch,
   Delete,
   Param,
+  Body,
   UseGuards,
 } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { UsersService } from './users.service';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from 'src/common/decorators/user.decorator';
 import { AuthenticatedUser } from 'src/common/decorators/user.decorator';
 
@@ -338,7 +350,7 @@ export class UserController {
 
   @Get()
   @UseGuards(RolesGuard) // ← Add RolesGuard
-  @Roles('admin') // ← Only admins can list all users
+  @Roles(UserRole.ADMIN) // ← Only admins can list all users
   findAll() {
     return this.usersService.findAll();
   }
@@ -346,7 +358,7 @@ export class UserController {
   @Get(':id')
   getOne(@Param('id') id: string, @User() user: AuthenticatedUser) {
     // Users can view their own profile, admins can view any
-    if (user.userId !== id && user.role !== 'admin') {
+    if (user.userId !== id && user.role !== UserRole.ADMIN) {
       throw new ForbiddenException('Access denied');
     }
     return this.usersService.findById(id);
@@ -359,7 +371,7 @@ export class UserController {
     @User() user: AuthenticatedUser,
   ) {
     // Users can update their own profile, admins can update any
-    if (user.userId !== id && user.role !== 'admin') {
+    if (user.userId !== id && user.role !== UserRole.ADMIN) {
       throw new ForbiddenException('Access denied');
     }
     return this.usersService.update(updateUserDto, id);
@@ -367,7 +379,7 @@ export class UserController {
 
   @Delete(':id')
   @UseGuards(RolesGuard) // ← Add RolesGuard
-  @Roles('admin') // ← Only admins can delete users
+  @Roles(UserRole.ADMIN) // ← Only admins can delete users
   delete(@Param('id') id: string) {
     return this.usersService.delete(id);
   }
@@ -396,7 +408,7 @@ Authorization: Bearer <user-token>
 **2. Test with admin user:**
 
 ```bash
-# Login as admin
+# Login as admin (user with role ADMIN)
 POST /users/login
 {
   "email": "admin@example.com",
@@ -413,14 +425,14 @@ Authorization: Bearer <admin-token>
 **3. Test multiple roles:**
 
 ```bash
-# Login as moderator
+# Login as user with MODERATOR role
 POST /users/login
 {
   "email": "moderator@example.com",
   "password": "password123"
 }
 
-# Access route that allows admin OR moderator
+# Access route that allows ADMIN OR MODERATOR
 GET /admin/moderate
 Authorization: Bearer <moderator-token>
 
@@ -441,9 +453,9 @@ Authorization: Bearer <moderator-token>
 
 **Solutions:**
 
-- Check role in JWT payload matches database
-- Verify `@Roles()` decorator has correct role name
-- Check case sensitivity ('admin' vs 'Admin')
+- Check role in JWT payload matches database (use enum: USER, ADMIN, MODERATOR, MANAGER)
+- Verify `@Roles()` uses `UserRole` enum (e.g. `@Roles(UserRole.ADMIN)`)
+- Ensure Prisma client is generated so `UserRole` is available from `@prisma/client`
 
 **Issue 3: "RolesGuard not working"**
 

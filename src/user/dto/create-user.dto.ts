@@ -1,9 +1,11 @@
+import { UserRole } from '@prisma/client';
 import {
   IsEmail,
   IsNotEmpty,
   MinLength,
   IsOptional,
   IsString,
+  IsEnum,
 } from 'class-validator';
 
 export class CreateUserDto {
@@ -19,4 +21,10 @@ export class CreateUserDto {
   @IsString()
   @IsOptional()
   name?: string;
+
+  @IsOptional()
+  @IsEnum(UserRole as object, {
+    message: 'Role must be one of: USER, ADMIN, MODERATOR, MANAGER',
+  })
+  role?: UserRole;
 }

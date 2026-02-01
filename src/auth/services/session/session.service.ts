@@ -1,11 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { UserRole } from '@prisma/client';
 import { RedisService } from 'src/common/services/redis.service';
 
 export interface SessionData {
   userId: string;
   email: string;
   createdAt: string;
+  role?: UserRole;
 }
 
 @Injectable()

@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from 'prisma/prisma.service';
-import { User } from '@prisma/client';
+import { User, UserRole } from '@prisma/client';
 import { PasswordService } from 'src/common/services/password.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
@@ -74,12 +74,14 @@ export class UsersService {
     const { token, tokenId } = await this.jwtService.generateToken(
       user.id,
       user.email,
+      user.role,
     );
 
     // up next create session in redis using the tokenId
     await this.sessionService.createSession(tokenId, {
       userId: user.id,
       email: user.email,
+      role: user.role as UserRole,
       createdAt: new Date().toDateString(),
     });
 
@@ -99,11 +101,16 @@ export class UsersService {
     const hashedPassword = await this.passwordService.hashPassword(
       createUserDto.password,
     );
+    // DTO validates role via @IsEnum; default is valid UserRole
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- CreateUserDto.role is validated; fallback 'USER' is valid enum
+    const role = (createUserDto.role ?? 'USER') as UserRole;
     return this.prisma.user.create({
       data: {
         email: createUserDto.email,
         password: hashedPassword,
         name: createUserDto.name,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- role is UserRole (set above)
+        role,
       },
     });
   }

@@ -41,25 +41,28 @@ Update `src/common/decorators/roles.decorator.ts`:
 
 ```typescript
 import { SetMetadata } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 
 export const ROLES_KEY = 'roles';
 
 /**
  * Decorator to specify required roles for a route
- * @param roles - One or more roles (OR logic: user needs ANY of these roles)
+ * @param roles - One or more UserRole enum values (OR logic)
  * @example
- * @Roles('admin')
- * @Roles('admin', 'moderator')
+ * @Roles(UserRole.ADMIN)
+ * @Roles(UserRole.ADMIN, UserRole.MODERATOR)
  */
-export const Roles = (...roles: string[]) => SetMetadata(ROLES_KEY, roles);
+export const Roles = (...roles: UserRole[]) => SetMetadata(ROLES_KEY, roles);
 ```
 
 **Usage examples:**
 
 ```typescript
-@Roles('admin')                    // Single role
-@Roles('admin', 'moderator')       // Multiple roles (OR)
-@Roles('user', 'admin', 'manager') // Any of these roles
+import { UserRole } from '@prisma/client';
+
+@Roles(UserRole.ADMIN)                          // Single role
+@Roles(UserRole.ADMIN, UserRole.MODERATOR)      // Multiple roles (OR)
+@Roles(UserRole.USER, UserRole.ADMIN, UserRole.MANAGER) // Any of these roles
 ```
 
 ## Step 3: Create RequireAllRoles Decorator
@@ -68,24 +71,27 @@ Sometimes you need AND logic (user must have ALL roles). Create `src/common/deco
 
 ```typescript
 import { SetMetadata } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 
 export const REQUIRE_ALL_ROLES_KEY = 'requireAllRoles';
 
 /**
  * Decorator to specify roles that ALL must be present (AND logic)
  * Note: This is rarely used, but useful for complex permission systems
- * @param roles - All roles must be present
+ * @param roles - All roles must be present (UserRole enum)
  * @example
- * @RequireAllRoles('admin', 'superuser')
+ * @RequireAllRoles(UserRole.ADMIN)
  */
-export const RequireAllRoles = (...roles: string[]) =>
+export const RequireAllRoles = (...roles: UserRole[]) =>
   SetMetadata(REQUIRE_ALL_ROLES_KEY, roles);
 ```
 
 **Usage:**
 
 ```typescript
-@RequireAllRoles('admin', 'superuser')  // Must be admin AND superuser
+import { UserRole } from '@prisma/client';
+
+@RequireAllRoles(UserRole.ADMIN)  // Must have admin role
 ```
 
 **Note:** This requires a custom guard implementation. For most cases, `@Roles()` with OR logic is sufficient.
@@ -96,21 +102,24 @@ Create a decorator that can be used in service methods. Create `src/common/decor
 
 ```typescript
 import { SetMetadata } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 
 export const HAS_ROLE_KEY = 'hasRole';
 
 /**
  * Decorator to check if user has a specific role
  * Used in service methods or route handlers
- * @param role - Required role
+ * @param role - Required role (UserRole enum)
  */
-export const HasRole = (role: string) => SetMetadata(HAS_ROLE_KEY, role);
+export const HasRole = (role: UserRole) => SetMetadata(HAS_ROLE_KEY, role);
 ```
 
 **Usage in service:**
 
 ```typescript
-@HasRole('admin')
+import { UserRole } from '@prisma/client';
+
+@HasRole(UserRole.ADMIN)
 async deleteUser(id: string) {
   // Method requires admin role
 }
@@ -159,12 +168,13 @@ Enhance the `@User()` decorator to optionally extract specific fields. Update `s
 
 ```typescript
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 
 export interface AuthenticatedUser {
   userId: string;
   email: string;
   name?: string;
-  role?: string;
+  role?: UserRole;
   tokenId?: string;
 }
 
@@ -252,6 +262,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { UserRole } from '@prisma/client';
 import { IS_OWNER_KEY } from 'src/common/decorators/is-owner.decorator';
 import { PrismaService } from 'prisma/prisma.service';
 
@@ -276,7 +287,7 @@ export class OwnerGuard implements CanActivate {
     const user = request.user;
 
     // Admins can access anything
-    if (user?.role === 'admin') {
+    if (user?.role === UserRole.ADMIN) {
       return true;
     }
 
@@ -325,12 +336,17 @@ getProfile(@Param('id') id: string) {
 Create `src/common/utils/role.utils.ts`:
 
 ```typescript
+import { UserRole } from '@prisma/client';
+
 /**
  * Check if user has any of the required roles
- * @param userRole - User's role
+ * @param userRole - User's role (enum)
  * @param requiredRoles - Required roles (OR logic)
  */
-export function hasAnyRole(userRole: string, requiredRoles: string[]): boolean {
+export function hasAnyRole(
+  userRole: UserRole,
+  requiredRoles: UserRole[],
+): boolean {
   return requiredRoles.includes(userRole);
 }
 
@@ -340,8 +356,8 @@ export function hasAnyRole(userRole: string, requiredRoles: string[]): boolean {
  * @param requiredRoles - Required roles (AND logic)
  */
 export function hasAllRoles(
-  userRoles: string[],
-  requiredRoles: string[],
+  userRoles: UserRole[],
+  requiredRoles: UserRole[],
 ): boolean {
   return requiredRoles.every((role) => userRoles.includes(role));
 }
@@ -349,25 +365,26 @@ export function hasAllRoles(
 /**
  * Check if user is admin
  */
-export function isAdmin(role: string): boolean {
-  return role === 'admin';
+export function isAdmin(role: UserRole): boolean {
+  return role === UserRole.ADMIN;
 }
 
 /**
  * Check if user is admin or moderator
  */
-export function isAdminOrModerator(role: string): boolean {
-  return role === 'admin' || role === 'moderator';
+export function isAdminOrModerator(role: UserRole): boolean {
+  return role === UserRole.ADMIN || role === UserRole.MODERATOR;
 }
 ```
 
 **Usage in services:**
 
 ```typescript
-import { hasAnyRole, isAdmin } from 'src/common/utils/role.utils';
+import { UserRole } from '@prisma/client';
+import { isAdmin } from 'src/common/utils/role.utils';
 
 async deleteUser(id: string, currentUser: AuthenticatedUser) {
-  if (!isAdmin(currentUser.role)) {
+  if (!currentUser.role || !isAdmin(currentUser.role)) {
     throw new ForbiddenException('Only admins can delete users');
   }
   // Delete logic
@@ -376,18 +393,10 @@ async deleteUser(id: string, currentUser: AuthenticatedUser) {
 
 ## Step 10: Create Role Constants
 
-Create `src/common/constants/roles.ts`:
+Create `src/common/constants/roles.ts` (re-export Prisma enum and add metadata/helpers):
 
 ```typescript
-/**
- * User roles constants
- */
-export enum UserRole {
-  USER = 'user',
-  ADMIN = 'admin',
-  MODERATOR = 'moderator',
-  MANAGER = 'manager',
-}
+export { UserRole } from '@prisma/client';
 
 /**
  * Metadata key for roles decorator
@@ -395,19 +404,14 @@ export enum UserRole {
 export const ROLES_KEY = 'roles';
 
 /**
- * All available roles
- */
-export const ALL_ROLES = Object.values(UserRole);
-
-/**
  * Admin-only roles
  */
-export const ADMIN_ROLES = [UserRole.ADMIN];
+export const ADMIN_ROLES = [UserRole.ADMIN] as const;
 
 /**
  * Moderator and above roles
  */
-export const MODERATOR_ROLES = [UserRole.ADMIN, UserRole.MODERATOR];
+export const MODERATOR_ROLES = [UserRole.ADMIN, UserRole.MODERATOR] as const;
 ```
 
 **Usage:**
@@ -420,34 +424,22 @@ import { UserRole, ADMIN_ROLES } from 'src/common/constants/roles';
 deleteUser() { ... }
 ```
 
-## Step 11: Update Roles Decorator to Use Constants
+## Step 11: Roles Decorator (Final)
 
-Update `src/common/decorators/roles.decorator.ts`:
-
-```typescript
-import { SetMetadata } from '@nestjs/common';
-import { ROLES_KEY } from 'src/common/constants/roles';
-
-/**
- * Decorator to specify required roles for a route
- * @param roles - One or more roles (OR logic)
- * @example
- * @Roles('admin')
- * @Roles(UserRole.ADMIN, UserRole.MODERATOR)
- */
-export const Roles = (...roles: string[]) => SetMetadata(ROLES_KEY, roles);
-```
+Your `src/common/decorators/roles.decorator.ts` should use `UserRole` from `@prisma/client` (or from your constants file) as in Step 2.
 
 ## Step 12: Usage Examples
 
 **Example 1: Admin-only route**
 
 ```typescript
+import { UserRole } from '@prisma/client';
+
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AdminController {
   @Get('dashboard')
-  @Roles('admin')
+  @Roles(UserRole.ADMIN)
   getDashboard() {
     return { message: 'Admin dashboard' };
   }
@@ -458,7 +450,7 @@ export class AdminController {
 
 ```typescript
 @Get('moderate')
-@Roles('admin', 'moderator')
+@Roles(UserRole.ADMIN, UserRole.MODERATOR)
 moderateContent() {
   return { message: 'Moderation panel' };
 }
@@ -479,7 +471,7 @@ updateProfile(@Param('id') id: string, @Body() dto: UpdateUserDto) {
 
 ```typescript
 @Get('my-role')
-getMyRole(@User('role') role: string) {
+getMyRole(@User('role') role: UserRole) {
   return { role };
 }
 ```

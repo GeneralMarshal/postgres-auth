@@ -24,6 +24,7 @@ Create `src/auth/services/permission.service.ts`:
 
 ```typescript
 import { Injectable, ForbiddenException } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 import { AuthenticatedUser } from 'src/common/decorators/user.decorator';
 
 @Injectable()
@@ -31,7 +32,7 @@ export class PermissionService {
   /**
    * Check if user has required role
    */
-  hasRole(user: AuthenticatedUser, requiredRoles: string[]): boolean {
+  hasRole(user: AuthenticatedUser, requiredRoles: UserRole[]): boolean {
     if (!user?.role) {
       return false;
     }
@@ -42,7 +43,7 @@ export class PermissionService {
    * Check if user is admin
    */
   isAdmin(user: AuthenticatedUser): boolean {
-    return user?.role === 'admin';
+    return user?.role === UserRole.ADMIN;
   }
 
   /**
@@ -62,7 +63,7 @@ export class PermissionService {
   /**
    * Throw ForbiddenException if user doesn't have role
    */
-  requireRole(user: AuthenticatedUser, requiredRoles: string[]): void {
+  requireRole(user: AuthenticatedUser, requiredRoles: UserRole[]): void {
     if (!this.hasRole(user, requiredRoles)) {
       throw new ForbiddenException(
         `Access denied. Required roles: ${requiredRoles.join(', ')}`,
@@ -187,7 +188,7 @@ export class UsersService {
       }
     }
 
-    // If updating role, require admin
+    // If updating role, require admin (only admins can change roles)
     if (updateUserDto.role && updateUserDto.role !== user.role) {
       this.permissionService.requireAdmin(currentUser);
     }
@@ -247,6 +248,7 @@ import {
   UseGuards,
   ForbiddenException,
 } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
@@ -267,7 +269,7 @@ export class UserController {
 
   @Get()
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles(UserRole.ADMIN)
   findAll() {
     return this.usersService.findAll();
   }
@@ -290,7 +292,7 @@ export class UserController {
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles(UserRole.ADMIN)
   async delete(@Param('id') id: string, @User() user: AuthenticatedUser) {
     // Permission check happens in service
     return this.usersService.delete(id, user);
@@ -310,6 +312,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { UserRole } from '@prisma/client';
 import { PERMISSIONS_KEY } from 'src/common/decorators/require-permissions.decorator';
 import { PermissionService } from '../services/permission.service';
 
@@ -338,15 +341,15 @@ export class ResourcePermissionGuard implements CanActivate {
     }
 
     // Check permissions (simplified - in real app, check user's permissions)
-    // For now, map permissions to roles
-    const permissionToRoleMap: Record<string, string[]> = {
-      'users:delete': ['admin'],
-      'users:update': ['admin'],
-      'users:read': ['admin', 'moderator'],
-      'admin:access': ['admin'],
+    // For now, map permissions to roles (use UserRole enum)
+    const permissionToRoleMap: Record<string, UserRole[]> = {
+      'users:delete': [UserRole.ADMIN],
+      'users:update': [UserRole.ADMIN],
+      'users:read': [UserRole.ADMIN, UserRole.MODERATOR],
+      'admin:access': [UserRole.ADMIN],
     };
 
-    const userRole = user.role || 'user';
+    const userRole = user.role ?? UserRole.USER;
     const hasPermission = requiredPermissions.some((permission) => {
       const allowedRoles = permissionToRoleMap[permission] || [];
       return allowedRoles.includes(userRole);
@@ -369,6 +372,7 @@ Create `src/auth/services/context-permission.service.ts`:
 
 ```typescript
 import { Injectable } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 import { AuthenticatedUser } from 'src/common/decorators/user.decorator';
 
 @Injectable()
@@ -382,7 +386,7 @@ export class ContextPermissionService {
     context: Record<string, any>,
   ): boolean {
     // Admin can do anything
-    if (user.role === 'admin') {
+    if (user.role === UserRole.ADMIN) {
       return true;
     }
 
@@ -394,7 +398,7 @@ export class ContextPermissionService {
 
       case 'delete':
         // Only admin can delete
-        return user.role === 'admin';
+        return user.role === UserRole.ADMIN;
 
       case 'read':
         // User can read their own resources or public resources
@@ -412,7 +416,7 @@ export class ContextPermissionService {
    */
   canAccessDuringHours(user: AuthenticatedUser, currentHour: number): boolean {
     // Admin can access anytime
-    if (user.role === 'admin') {
+    if (user.role === UserRole.ADMIN) {
       return true;
     }
 
@@ -425,7 +429,7 @@ export class ContextPermissionService {
    */
   canAccessResource(user: AuthenticatedUser, resourceStatus: string): boolean {
     // Admin can access any resource
-    if (user.role === 'admin') {
+    if (user.role === UserRole.ADMIN) {
       return true;
     }
 
@@ -443,6 +447,7 @@ Create `src/admin/admin.controller.ts`:
 
 ```typescript
 import { Controller, Get, UseGuards } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { ResourcePermissionGuard } from 'src/auth/guards/resource-permission.guard';
@@ -453,14 +458,14 @@ import { RequirePermissions } from 'src/common/decorators/require-permissions.de
 @UseGuards(JwtAuthGuard, RolesGuard, ResourcePermissionGuard)
 export class AdminController {
   @Get('dashboard')
-  @Roles('admin')
+  @Roles(UserRole.ADMIN)
   @RequirePermissions('admin:access')
   getDashboard() {
     return { message: 'Admin dashboard' };
   }
 
   @Get('users')
-  @Roles('admin')
+  @Roles(UserRole.ADMIN)
   @RequirePermissions('users:read')
   getAllUsers() {
     return { message: 'All users' };
@@ -553,7 +558,7 @@ Check permissions at multiple levels:
 ```typescript
 // Guard level
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin')
+@Roles(UserRole.ADMIN)
 
 // Service level
 async deleteUser(id: string, currentUser: AuthenticatedUser) {
@@ -581,12 +586,12 @@ if (!hasPermission) {
 }
 ```
 
-### 4. Use Constants for Roles
+### 4. Use Enum for Roles
 
 ```typescript
-import { UserRole } from 'src/common/constants/roles';
+import { UserRole } from '@prisma/client';
 
-@Roles(UserRole.ADMIN)  // Type-safe
+@Roles(UserRole.ADMIN)  // Type-safe (enum)
 ```
 
 ### 5. Document Permission Requirements
@@ -598,7 +603,7 @@ import { UserRole } from 'src/common/constants/roles';
  * @permission users:delete
  */
 @Delete(':id')
-@Roles('admin')
+@Roles(UserRole.ADMIN)
 deleteUser() { ... }
 ```
 

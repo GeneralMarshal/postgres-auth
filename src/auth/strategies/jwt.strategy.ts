@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { SessionService } from '../services/session/session.service';
+import { UserRole } from '@prisma/client';
 
 export interface JwtPayload {
   sub: string;
@@ -46,7 +47,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       userId: payload.sub,
       email: payload.email,
       name: payload.name,
-      role: payload.role,
+      role: payload.role ?? UserRole.USER,
       tokenId: payload.jti,
     };
   }

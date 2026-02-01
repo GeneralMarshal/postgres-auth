@@ -71,10 +71,10 @@ Authorization determines what an authenticated user is allowed to do. It's about
 ```typescript
 // Authorization guard checks: "Does this user have permission?"
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin')
+@Roles(UserRole.ADMIN)
 @Delete(':id')
 deleteUser(@Param('id') id: string) {
-  // User is authenticated AND authorized
+  // User is authenticated AND authorized (import UserRole from '@prisma/client')
   return this.usersService.delete(id);
 }
 ```
@@ -105,7 +105,7 @@ Request → Authentication → Authorization → Route Handler
 // Step 1: Authentication (JwtAuthGuard)
 @UseGuards(JwtAuthGuard)  // ← Checks: "Is token valid?"
 @UseGuards(RolesGuard)    // ← Checks: "Is user admin?"
-@Roles('admin')           // ← Required role
+@Roles(UserRole.ADMIN)    // ← Required role (enum)
 @Delete(':id')
 deleteUser(@Param('id') id: string) {
   // Both checks passed!
@@ -165,7 +165,7 @@ getProfile(@User() user) {
 @Delete(':id')
 deleteUser(@Param('id') id: string) {
   // ANY authenticated user can delete ANY user!
-  // This is a security issue!
+  // This is a security issue! (Lesson 06 adds @Roles(UserRole.ADMIN))
   return this.usersService.delete(id);
 }
 ```
@@ -181,7 +181,7 @@ deleteUser(@Param('id') id: string) {
 
 In this lesson, you'll implement:
 
-1. **Roles in User Model** - Add `role` field (admin, user, etc.)
+1. **Roles in User Model** - Add `UserRole` enum and `role` field (Prisma)
 2. **Role Guards** - Guards that check user roles
 3. **Role Decorators** - Easy way to mark routes with required roles
 4. **Permission Checking** - Logic to verify user permissions
@@ -191,7 +191,7 @@ In this lesson, you'll implement:
 ```typescript
 // ✅ Authentication + Authorization
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin')
+@Roles(UserRole.ADMIN)
 @Delete(':id')
 deleteUser(@Param('id') id: string) {
   // Only admins can delete users
@@ -203,14 +203,16 @@ deleteUser(@Param('id') id: string) {
 
 ### Pattern 1: Role-Based Access Control (RBAC)
 
-**Roles:** Admin, User, Moderator, etc.
+**Roles:** Use the `UserRole` enum from Prisma (USER, ADMIN, MODERATOR, MANAGER).
 
 ```typescript
-@Roles('admin')  // Only admins
+import { UserRole } from '@prisma/client';
+
+@Roles(UserRole.ADMIN)  // Only admins
 @Delete(':id')
 deleteUser() { ... }
 
-@Roles('admin', 'moderator')  // Admins OR moderators
+@Roles(UserRole.ADMIN, UserRole.MODERATOR)  // Admins OR moderators
 @Patch(':id')
 updateUser() { ... }
 ```
@@ -232,7 +234,7 @@ deleteUser() { ... }
 ```typescript
 @Get(':id')
 getProfile(@Param('id') id: string, @User() user) {
-  if (user.userId !== id && user.role !== 'admin') {
+  if (user.userId !== id && user.role !== UserRole.ADMIN) {
     throw new ForbiddenException();
   }
   return this.usersService.findById(id);
@@ -245,7 +247,7 @@ getProfile(@Param('id') id: string, @User() user) {
 
 ```typescript
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin')
+@Roles(UserRole.ADMIN)
 @Delete(':id')
 deleteUser() { ... }
 ```
@@ -255,7 +257,7 @@ deleteUser() { ... }
 1. `JwtAuthGuard` runs first → Checks authentication
 2. If authentication fails → Returns 401, stops execution
 3. If authentication succeeds → `RolesGuard` runs
-4. `RolesGuard` checks role → Checks if user has 'admin' role
+4. `RolesGuard` checks role → Checks if user has required role (e.g. UserRole.ADMIN)
 5. If role check fails → Returns 403, stops execution
 6. If role check succeeds → Route handler executes
 
